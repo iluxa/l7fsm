@@ -1,0 +1,114 @@
+diff --git a/include/net/netfilter/nf_conntrack.h b/include/net/netfilter/nf_conntrack.h
+index 644d9c2..0810e5c 100644
+--- a/include/net/netfilter/nf_conntrack.h
++++ b/include/net/netfilter/nf_conntrack.h
+@@ -39,6 +39,8 @@ union nf_conntrack_expect_proto {
+ 	/* insert expect proto private data here */
+ };
+ 
++struct l7fsm_state_t;
++
+ #include <linux/types.h>
+ #include <linux/skbuff.h>
+ #include <linux/timer.h>
+@@ -107,6 +109,8 @@ struct nf_conn {
+ 
+ 	/* Storage reserved for other modules, must be the last member */
+ 	union nf_conntrack_proto proto;
++
++    struct l7fsm_state_t *l7fsm_state;
+ };
+ 
+ static inline struct nf_conn *
+diff --git a/net/netfilter/Kconfig b/net/netfilter/Kconfig
+index 56d22ca..6ddec58 100644
+--- a/net/netfilter/Kconfig
++++ b/net/netfilter/Kconfig
+@@ -320,6 +320,22 @@ config NF_CONNTRACK_TFTP
+ 
+ 	  To compile it as a module, choose M here.  If unsure, say N.
+ 
++config NF_CONNTRACK_L7FSM
++	tristate "l7fsm protocols support"
++	depends on NETFILTER_ADVANCED
++	help
++	  level 7 protocols tracking helper based on finite state machine.
++
++	  To compile it as a module, choose M here.  If unsure, say N.
++
++config NF_CONNTRACK_L7FSM_DEBUG
++	bool "l7fsm debug"
++	depends on NETFILTER_ADVANCED
++	help
++	  Debug l7fsm module. It can generate a lot of messages.
++
++	  If unsure, say N.
++
+ config NF_CT_NETLINK
+ 	tristate 'Connection tracking netlink interface'
+ 	select NETFILTER_NETLINK
+@@ -1011,6 +1027,22 @@ config NETFILTER_XT_MATCH_IPVS
+ 
+ 	  If unsure, say N.
+ 
++config NETFILTER_XT_MATCH_L7FSM
++   tristate 'level7 match support'
++   depends on NETFILTER_ADVANCED
++   depends on NF_CONNTRACK_L7FSM
++   help
++      OSI level 7 protocol matching support. Match based on NF_CONNTRACK_L7FSM filter
++
++      To compile it as a module, choose M here.  If unsure, say N.
++
++config NETFILTER_XT_MATCH_L7FSM_DEBUG
++   bool 'level7 debug'
++   help
++      xt_l7fsm debugging
++
++      If unsure, say N.
++
+ config NETFILTER_XT_MATCH_LENGTH
+ 	tristate '"length" match support'
+ 	depends on NETFILTER_ADVANCED
+diff --git a/net/netfilter/Makefile b/net/netfilter/Makefile
+index a1abf87..d32aae8 100644
+--- a/net/netfilter/Makefile
++++ b/net/netfilter/Makefile
+@@ -43,6 +43,11 @@ obj-$(CONFIG_NF_CONNTRACK_PPTP) += nf_conntrack_pptp.o
+ obj-$(CONFIG_NF_CONNTRACK_SANE) += nf_conntrack_sane.o
+ obj-$(CONFIG_NF_CONNTRACK_SIP) += nf_conntrack_sip.o
+ obj-$(CONFIG_NF_CONNTRACK_TFTP) += nf_conntrack_tftp.o
++obj-$(CONFIG_NF_CONNTRACK_L7FSM) += nf_conntrack_l7fsm.o
++
++net/netfilter/nf_conntrack_l7fsm.o: net/netfilter/l7fsm/l7fsm_http.h net/netfilter/l7fsm/l7fsm_ftp.h
++net/netfilter/l7fsm/l7fsm_%.h: net/netfilter/l7fsm/l7fsm_%.rl
++	@ragel -o $@ $< 
+ 
+ nf_nat-y	:= nf_nat_core.o nf_nat_proto_unknown.o nf_nat_proto_common.o \
+ 		   nf_nat_proto_udp.o nf_nat_proto_tcp.o nf_nat_helper.o
+@@ -117,6 +122,7 @@ obj-$(CONFIG_NETFILTER_XT_MATCH_HELPER) += xt_helper.o
+ obj-$(CONFIG_NETFILTER_XT_MATCH_HL) += xt_hl.o
+ obj-$(CONFIG_NETFILTER_XT_MATCH_IPRANGE) += xt_iprange.o
+ obj-$(CONFIG_NETFILTER_XT_MATCH_IPVS) += xt_ipvs.o
++obj-$(CONFIG_NETFILTER_XT_MATCH_L7FSM) += xt_l7fsm.o
+ obj-$(CONFIG_NETFILTER_XT_MATCH_LENGTH) += xt_length.o
+ obj-$(CONFIG_NETFILTER_XT_MATCH_LIMIT) += xt_limit.o
+ obj-$(CONFIG_NETFILTER_XT_MATCH_MAC) += xt_mac.o
+@@ -145,3 +151,5 @@ obj-$(CONFIG_IP_SET) += ipset/
+ 
+ # IPVS
+ obj-$(CONFIG_IP_VS) += ipvs/
++
++include net/netfilter/l7fsm/Makefile
+diff --git a/net/netfilter/nf_conntrack_core.c b/net/netfilter/nf_conntrack_core.c
+index 0283bae..370c2b3 100644
+--- a/net/netfilter/nf_conntrack_core.c
++++ b/net/netfilter/nf_conntrack_core.c
+@@ -736,6 +736,7 @@ __nf_conntrack_alloc(struct net *net, u16 zone,
+ 	 */
+ 	smp_wmb();
+ 	atomic_set(&ct->ct_general.use, 1);
++	ct->l7fsm_state=0;
+ 	return ct;
+ 
+ #ifdef CONFIG_NF_CONNTRACK_ZONES

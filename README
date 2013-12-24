@@ -1,0 +1,66 @@
+l7fsm-filter is Netfilter module to match and filter OSI Level7 protocols 
+based on finite state machine.
+Finite state machine filtering method is very fast compared with regexp and manual memory comparing methods.
+
+l7fsm filter uses Ragel state machine compiler ( http://www.complang.org/ragel/ )
+
+Currently l7fsm supports tcp and udp transport protocols.
+
+It includes kernel patch, iptables and two new kernel modules:
+nf_conntrack_l7fsm
+xt_l7fsm
+
+to build the project:
+apply patch to linux kernel
+copy files and directories from kernel folder to kernel tree
+copy files and directories from iptables folder to iptables tree
+install Ragel state machine compiler
+
+enable items 'l7fsm protocols support' and 'level7 match support' in kernel configuration in section
+Networking support -->
+    Networking options --> 
+    	Network packet filtering framework (Netfilter) -->
+        	Core Netfilter Configuration -->
+
+
+build kernel modules nf_conntrack, nf_conntrack_l7fsm, xt_l7fsm
+
+build iptables in install
+
+How to use l7fsm:
+
+load kernel modules:
+sudo modprobe nf_conntrack_l7fsm
+sudo modprobe xt_l7fsm
+sudo modprobe iptable_raw
+
+Add iptables rules to track all connections by l7fsm filter:
+
+sudo iptables -t raw -A OUTPUT -p tcp -j CT --helper l7fsm_tcp
+sudo iptables -t raw -A PREROUTING -p tcp -j CT --helper l7fsm_tcp
+sudo iptables -t raw -A OUTPUT -p udp -j CT --helper l7fsm_udp
+sudo iptables -t raw -A PREROUTING -p udp -j CT --helper l7fsm_udp
+
+To count packet by protocol add rules for l7fsm filter:
+
+sudo iptables -A OUTPUT -p tcp -m l7fsm --filters "http" -j ACCEPT
+sudo iptables -A INPUT -p tcp -m l7fsm --filters "http" -j ACCEPT
+sudo iptables -A FORWARD -p tcp -m l7fsm --filters "http" -j ACCEPT
+
+sudo iptables -A OUTPUT -p tcp -m l7fsm --filters "ftp" -j ACCEPT
+sudo iptables -A INPUT -p tcp -m l7fsm --filters "ftp" -j ACCEPT
+sudo iptables -A FORWARD -p tcp -m l7fsm --filters "ftp" -j ACCEPT
+
+sudo iptables -A OUTPUT -p tcp -m l7fsm --filters "smtp" -j ACCEPT
+sudo iptables -A INPUT -p tcp -m l7fsm --filters "smtp" -j ACCEPT
+sudo iptables -A FORWARD -p tcp -m l7fsm --filters "smtp" -j ACCEPT
+
+sudo iptables -A OUTPUT -p tcp -m l7fsm --filters "sip" -j ACCEPT
+sudo iptables -A OUTPUT -p udp -m l7fsm --filters "sip" -j ACCEPT
+sudo iptables -A INPUT -p tcp -m l7fsm --filters "sip" -j ACCEPT
+sudo iptables -A INPUT -p udp -m l7fsm --filters "sip" -j ACCEPT
+sudo iptables -A FORWARD -p tcp -m l7fsm --filters "sip" -j ACCEPT
+sudo iptables -A FORWARD -p udp -m l7fsm --filters "sip" -j ACCEPT
+
+To view packets and bytes matched for each rule:
+sudo iptables -L -v

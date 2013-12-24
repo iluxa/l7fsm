@@ -1,0 +1,37 @@
+- implement protocols from the list (see below)
+- expectations for multiconnection protocols (like FTP, SIP and others)
+- filter by l7 protocols tokens (for example http url, sip phone number and others)
+
+Protocol list to implement:
+
+bittorrent
+dhcp
+dns
+gtp
+h323
+iax
+irc
+jabber
+imap4
+pop3
+mgcp
+msn
+mssql
+mysql
+netbios
+nfs
+ntp
+oscar
+postgres
+radius
+skinny
+skype
+snmp
+ssh
+ssl
+stun
+telnet
+tftp
+viber
+vnc
+yahoo
